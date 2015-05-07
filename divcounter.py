@@ -159,20 +159,20 @@ def divisionsFromId(id):
 				elif personVote == "NO":
 					divisionsTable[divisionsNumberToday]['NOES'].append(thisLine)
 
-    # What sort of division was it?
-    # Here are the various strings I've seen:
-    # These need to be converted into the Unicode dash '\u2014' - regex now doesn't work.
-    # 'That this bill be now read a second time.'
-    # 'Question\u2014That the amendment be agreed to\u2014put.'
-    # 'Main question, as amended, put.'
-    # 'Question\u2014That Schedule 1, as amended, be agreed to\u2014put.'
-    # 'That this bill be now read a third time.'
-    # 'Question\u2014That Senator Fifield’s amendment to Senator Siewert’s proposed amendment be agreed to\u2014put.'
-    # 'Question\u2014That the amendment in respect of nos 1 and 2 be agreed to\u2014put.'
+	# What sort of division was it?
+	# Here are the various strings I've seen:
+	# These need to be converted into the Unicode dash '\u2014' - regex now doesn't work.
+	# 'That this bill be now read a second time.'
+	# 'Question\u2014That the amendment be agreed to\u2014put.'
+	# 'Main question, as amended, put.'
+	# 'Question\u2014That Schedule 1, as amended, be agreed to\u2014put.'
+	# 'That this bill be now read a third time.'
+	# 'Question\u2014That Senator Fifield’s amendment to Senator Siewert’s proposed amendment be agreed to\u2014put.'
+	# 'Question\u2014That the amendment in respect of nos 1 and 2 be agreed to\u2014put.'
 
-    # This section below here doesn't work for some reason.
+	# This section below here doesn't work for some reason.
 
-    divisionTypeSearch = {
+	divisionTypeSearch = {
         'First reading': u'bills*\s*be\s*now\s*read\s*a\s*first',
         'Second reading':u'bills*\s*be\s*now\s*read\s*a\s*second',
         'Third reading': u'bills*\s*be\s*now\s*read\s*a\s*third',
@@ -183,18 +183,18 @@ def divisionsFromId(id):
         'Amendment3': u'Question\u2014That\s*the\s*amendments*.*be\s*agreed\s*to\u2014put\.'
         }
 
-    # Get all of the relevant text from the page to search division type
-    # The only obvious way to do this is to dump out all of the potentially
-    # relevant text and go through each line to see if it matches one of our
-    # regular expressions.
-    segmentDivisionTypes = []
-    divisionText = soup.select('.JNP1')
+	# Get all of the relevant text from the page to search division type
+	# The only obvious way to do this is to dump out all of the potentially
+	# relevant text and go through each line to see if it matches one of our
+	# regular expressions.
+	segmentDivisionTypes = []
+	divisionText = soup.select('.JNP1')
 
-    for eachLine in divisionText:
-        for divType, divSearch in divisionTypeSearch.iteritems():
-            if re.search(divSearch, unicode(eachLine), re.UNICODE):
-                print divType, eachLine
-                #segmentDivisionTypes.append(divType)
+	for eachLine in divisionText:
+		for divType, divSearch in divisionTypeSearch.iteritems():
+			if re.search(divSearch, unicode(eachLine), re.UNICODE):
+				print divType, eachLine
+				#segmentDivisionTypes.append(divType)
 
 
 	return divisionsTable
@@ -207,19 +207,19 @@ def membersIntoGroups(divisionAyes, divisionNoes):
 	# FIXME: At the moment this is disconnected from the rest of the script!
 	#
 
-    groupVotes = {}
+	groupVotes = {}
 
-    for name, group in groupsList.iteritems():
-        if (group.isdisjoint(divisionNoes) and group.isdisjoint(divisionAyes)):
-            groupVotes[name] = '-'
-        elif group.isdisjoint(divisionNoes):
-            groupVotes[name] = 'Yes'
-        elif group.isdisjoint(divisionAyes):
-            groupVotes[name] = 'No'
-        else:
+	for name, group in groupsList.iteritems():
+		if (group.isdisjoint(divisionNoes) and group.isdisjoint(divisionAyes)):
+			groupVotes[name] = '-'
+		elif group.isdisjoint(divisionNoes):
+			groupVotes[name] = 'Yes'
+		elif group.isdisjoint(divisionAyes):
+			groupVotes[name] = 'No'
+		else:
 			groupVotes[name] = 'Split'
 
-    return groupVotes
+	return groupVotes
 
 
 #	for divNumber in divisionsTable.iterkeys():
@@ -413,34 +413,34 @@ def resultsPrinter(startDate, endDate, printType):
 
 def main():
 
-    startDate = '10/03/2015'
-    endDate = '20/03/2015'
+	startDate = '10/03/2015'
+	endDate = '20/03/2015'
 
-    # Get the list of IDs of divisions in the date range from ParlInfo
-    divisionIdList = divisionSearch(startDate, endDate)
+	# Get the list of IDs of divisions in the date range from ParlInfo
+	divisionIdList = divisionSearch(startDate, endDate)
 
-    # Get the full list of individual votes.
-    divisionsDataList = []
-    for divisionId in divisionIdList:
-        divisionsDataDict = divisionsFromId(divisionId)
-        for segmentNumber in divisionsDataDict.iterkeys():
-            divisionsDataList.append(divisionsDataDict[segmentNumber])
-
-
-    # Get the party/group votes
-    divisionsGroupsList = []
-    for divisionsData in divisionsDataList:
-        groupDict = {}
-        groupDict.update(membersIntoGroups(divisionsData['AYES'], divisionsData['NOES']))
-        groupDict['metadata'] = divisionsData['metadata']
-        divisionsGroupsList.append(groupDict)
+	# Get the full list of individual votes.
+	divisionsDataList = []
+	for divisionId in divisionIdList:
+		divisionsDataDict = divisionsFromId(divisionId)
+		for segmentNumber in divisionsDataDict.iterkeys():
+			divisionsDataList.append(divisionsDataDict[segmentNumber])
 
 
-    print divisionsGroupsList
+	# Get the party/group votes
+	divisionsGroupsList = []
+	for divisionsData in divisionsDataList:
+		groupDict = {}
+		groupDict.update(membersIntoGroups(divisionsData['AYES'], divisionsData['NOES']))
+		groupDict['metadata'] = divisionsData['metadata']
+		divisionsGroupsList.append(groupDict)
 
-    #result = resultsPrinter(startDate, endDate, 3)
-    #print result
+
+	print divisionsGroupsList
+
+	#result = resultsPrinter(startDate, endDate, 3)
+	#print result
 
 if __name__ == "__main__":
-    main()
+	main()
 
