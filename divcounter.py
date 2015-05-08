@@ -3,6 +3,7 @@
 from bs4 import BeautifulSoup
 import urllib2
 import urllib
+import re
 #import string
 from datetime import datetime
 
@@ -44,6 +45,8 @@ groupsList = {
 verbose = True
 
 def verbosePrinter(text):
+	# Makes it easier to turn the dubugging text on and off. 
+	
 	if verbose:
 		print '#DEBUG#:', text
 		return
@@ -60,38 +63,39 @@ def getParlInfoId(id):
 	return soup
 
 def pageScraper(listOfIds):
-    return True
+	return True
 
-    #
-    # Takes a list of Ids outputted by divisionsSearch(), then for each of them
-    # calls divisionsFromId to get back a dict with the names of each of the
-    # members who voted AYES and NOES in the division along with the metadata from
-    # the ParlInfo segment. Then determines the ways each group voted with
-    # membersIntoGroups().
-    #
+	#
+	# Takes a list of Ids outputted by divisionsSearch(), then for each of them
+	# calls divisionsFromId to get back a dict with the names of each of the
+	# members who voted AYES and NOES in the division along with the metadata from
+	# the ParlInfo segment. Then determines the ways each group voted with
+	# membersIntoGroups().
+	#
 
-    # First, get a list back of dicts of division data.
-    #divisionsDataList = []
-    #for id in listOfIds:
-        #verbosePrinter('pageScraper: ' + id)
-        #divisionsDataList.append(divisionsFromId(id))
+	# First, get a list back of dicts of division data.
+	#divisionsDataList = []
+	#for id in listOfIds:
+		#verbosePrinter('pageScraper: ' + id)
+		#divisionsDataList.append(divisionsFromId(id))
 
-    #return divisionsDataList
+	#return divisionsDataList
 
-    # Next, determine the aggregate vote of each group and add to the end
-    # of the list.
-    #divisionsGroups = []
-    #for divisionData in divisionsDataList:
-    #    divisionsGroups.append(membersIntoGroups(divisionData))
+	# Next, determine the aggregate vote of each group and add to the end
+	# of the list.
+	#divisionsGroups = []
+	#for divisionData in divisionsDataList:
+	#    divisionsGroups.append(membersIntoGroups(divisionData))
 
-    #return divisionsGroups
+	#return divisionsGroups
 
 def isNumber(number):
-	# The program dies if the metadata items are missing and you try to turn them into a number
+	"""If it isn't a number, return 0, rather than having the script die."""
+
 	if number.isdigit():
 		return int(number)
 	else:
-		return 'Missing'
+		return int(0)
 
 def divisionsFromId(id):
 	#
@@ -107,7 +111,9 @@ def divisionsFromId(id):
 
 	# Metadata from the box at the top of each ParlInfo page
 	divisionDate = datetime.strptime(soup.select(".mdItem")[3].contents[0], '%d-%m-%Y') # Date of the sitting
-	divisionBill = soup.select(".mdItem")[1].contents[0] # Bill name
+	divisionItemNum = isNumber(soup.select(".mdItem")[1].contents[0].split(None, 1)[0]) # Item number
+	divisionBill = soup.select(".mdItem")[1].contents[0].split(None, 1)[1] # Bill name
+	divisionBill = divisionBill.replace(u'\u2014', '-') # Bill name without the UniCode dash
 	divisionHouse = soup.select(".mdItem")[4].contents[0] # House (ie., 'Senate')
 	divisionParl = int(soup.select(".mdItem")[5].contents[0]) # Parliament Number
 	divisionJoural = int(soup.select(".mdItem")[6].contents[0]) # Journal Number
@@ -132,15 +138,16 @@ def divisionsFromId(id):
 			divisionAyesNumber = int(thisLine.split()[1])
 			personVote = "AYE"
 			divisionsMetaData = {
-			    'date': divisionDate,
-			    'house': divisionHouse,
-			    'number': divisionsNumberToday,
-			    'bill': divisionBill,
-			    'journal': divisionJoural,
-			    'page': divisionPage,
-			    'parl': divisionParl,
-			    'id': divisionParlInfoId,
-			    'ayes': divisionAyesNumber}
+			'date': divisionDate,
+			'house': divisionHouse,
+			'item': divisionItemNum,
+			'number': divisionsNumberToday,
+			'bill': divisionBill,
+			'journal': divisionJoural,
+			'page': divisionPage,
+			'parl': divisionParl,
+			'id': divisionParlInfoId,
+			'ayes': divisionAyesNumber}
 			divisionsTable[divisionsNumberToday] = {}
 			divisionsTable[divisionsNumberToday]['metadata'] = divisionsMetaData
 			divisionsTable[divisionsNumberToday]['AYES'] = list()
@@ -158,30 +165,32 @@ def divisionsFromId(id):
 					divisionsTable[divisionsNumberToday]['AYES'].append(thisLine)
 				elif personVote == "NO":
 					divisionsTable[divisionsNumberToday]['NOES'].append(thisLine)
+	
+	verbosePrinter('Divisions in segment: ' + str(divisionsNumberToday))
 
 	# What sort of division was it?
 	# Here are the various strings I've seen:
-	# These need to be converted into the Unicode dash '\u2014' - regex now doesn't work.
 	# 'That this bill be now read a second time.'
-	# 'Question\u2014That the amendment be agreed to\u2014put.'
+	# 'Question—That the amendment be agreed to—put.'
 	# 'Main question, as amended, put.'
-	# 'Question\u2014That Schedule 1, as amended, be agreed to\u2014put.'
+	# 'Question—That Schedule 1, as amended, be agreed to—put.'
 	# 'That this bill be now read a third time.'
-	# 'Question\u2014That Senator Fifield’s amendment to Senator Siewert’s proposed amendment be agreed to\u2014put.'
-	# 'Question\u2014That the amendment in respect of nos 1 and 2 be agreed to\u2014put.'
+	# 'Question—That Senator Fifield’s amendment to Senator Siewert’s proposed amendment be agreed to—put.'
+	# 'Question—That the amendment in respect of nos 1 and 2 be agreed to—put.'
+	# 'Question—That Schedule 1, Part 1 stand as printed—put.
+	# 
+	# This one is too greedy: 	'Question2': u'Question(?:\u2014(.*)\u2014)\s*put\.'
 
 	# This section below here doesn't work for some reason.
 
 	divisionTypeSearch = {
-        'First reading': u'bills*\s*be\s*now\s*read\s*a\s*first',
-        'Second reading':u'bills*\s*be\s*now\s*read\s*a\s*second',
-        'Third reading': u'bills*\s*be\s*now\s*read\s*a\s*third',
-        'Amendment': u'proposed\s*amendments*\s*be\s*agreed\s*to\u2014put\.',
-        'Amendment1': u'Question\u2014That .* amendment\s*be\s*agreed to\u2014put\.',
-        'Question': u'Main\s*question,\s*as\s*amended,\.*put\.',
-        'Amendment2': u'Question\u2014That.* as\s*amended,\s*be\s*agreed\s*to\u2014put\.',
-        'Amendment3': u'Question\u2014That\s*the\s*amendments*.*be\s*agreed\s*to\u2014put\.'
-        }
+	'First reading': u'bills*\s*be\s*now\s*read\s*a\s*first',
+	'Second reading':u'bills*\s*be\s*now\s*read\s*a\s*second',
+	'Third reading': u'bills*\s*be\s*now\s*read\s*a\s*third',
+	'Amendment': u'(proposed\s*amendments*\s*be\s*agreed\s*to\u2014put\.|Question\u2014That.* as\s*amended,\s*be\s*agreed\s*to\u2014put\.|Question\u2014That\s*the\s*amendments*.*be\s*agreed\s*to\u2014put\.|questions*,\s*as\s*amended,\s*put\.)',
+	'Stand as printed': u'stand\s*as\s*printed\u2014put\.',
+	'SSO': 'moved\u2014That\s*so\s*much\s*of\s*the\s*standing\s*orders\s*be\s*suspended'
+	}
 
 	# Get all of the relevant text from the page to search division type
 	# The only obvious way to do this is to dump out all of the potentially
@@ -193,9 +202,17 @@ def divisionsFromId(id):
 	for eachLine in divisionText:
 		for divType, divSearch in divisionTypeSearch.iteritems():
 			if re.search(divSearch, unicode(eachLine), re.UNICODE):
-				print divType, eachLine
-				#segmentDivisionTypes.append(divType)
-
+				verbosePrinter(divType + ': ' + str(eachLine))
+				segmentDivisionTypes.append(divType)
+	
+	if len(segmentDivisionTypes) == divisionsNumberToday:
+		for divisionNumber in divisionsTable.iterkeys():
+			divisionsTable[divisionNumber]['metadata']['type'] = segmentDivisionTypes[divisionNumber - 1]
+	else:
+		for divisionNumber in divisionsTable.iterkeys():
+			divisionsTable[divisionNumber]['metadata']['type'] = 'Unknown'
+	
+	#print segmentDivisionTypes
 
 	return divisionsTable
 
@@ -222,25 +239,25 @@ def membersIntoGroups(divisionAyes, divisionNoes):
 	return groupVotes
 
 
-#	for divNumber in divisionsTable.iterkeys():
-#		#print '\n', divisionsTable[divNumber]['metadata']['bill'], '- Division', divNumber, "on", divisionsTable[divNumber]['metadata']['date'], '(Ayes: ', divisionsTable[divNumber]['metadata']['ayes'], ', Noes: ', divisionsTable[divNumber]['metadata']['noes'], '):'
-#		groupVotes = {}
-#		for name, group in groupsList.iteritems():
-#			# These are testing if a group isn't in a vote -- might not be very robust. Consider fixing.
-#			if (group.isdisjoint(divisionsTable[divNumber]['NOES']) and group.isdisjoint(divisionsTable[divNumber]['AYES'])):
-#				groupVotes[name] = '-'
-#				#print name, "-"
-#			elif group.isdisjoint(divisionsTable[divNumber]['NOES']):
-#				groupVotes[name] = 'Yes'
-#				#print name, "Yes"
-#			elif group.isdisjoint(divisionsTable[divNumber]['AYES']):
-#				groupVotes[name] = 'No'
-#				#print name, "No"
-#			else:
-#				groupVotes[name] = 'Split'
-#			groupsTable[divNumber]['Group'] = groupVotes
+#   for divNumber in divisionsTable.iterkeys():
+#       #print '\n', divisionsTable[divNumber]['metadata']['bill'], '- Division', divNumber, "on", divisionsTable[divNumber]['metadata']['date'], '(Ayes: ', divisionsTable[divNumber]['metadata']['ayes'], ', Noes: ', divisionsTable[divNumber]['metadata']['noes'], '):'
+#       groupVotes = {}
+#       for name, group in groupsList.iteritems():
+#           # These are testing if a group isn't in a vote -- might not be very robust. Consider fixing.
+#           if (group.isdisjoint(divisionsTable[divNumber]['NOES']) and group.isdisjoint(divisionsTable[divNumber]['AYES'])):
+#               groupVotes[name] = '-'
+#               #print name, "-"
+#           elif group.isdisjoint(divisionsTable[divNumber]['NOES']):
+#               groupVotes[name] = 'Yes'
+#               #print name, "Yes"
+#           elif group.isdisjoint(divisionsTable[divNumber]['AYES']):
+#               groupVotes[name] = 'No'
+#               #print name, "No"
+#           else:
+#               groupVotes[name] = 'Split'
+#           groupsTable[divNumber]['Group'] = groupVotes
 #
-#	return divisionsTable
+#   return divisionsTable
 
 def divisionSearch(dateStart, dateEnd):
 	#
@@ -272,7 +289,7 @@ def divisionSearch(dateStart, dateEnd):
 
 	for each in searchData:
 		searchLine = each.contents[0].split()[7]
-		#	for pageId in soup.select('.sumMeta')[50].contents[0].split()[7]:
+		#   for pageId in soup.select('.sumMeta')[50].contents[0].split()[7]:
 		results.append(searchLine)
 
 	currentPage = 0
@@ -413,8 +430,8 @@ def resultsPrinter(startDate, endDate, printType):
 
 def main():
 
-	startDate = '10/03/2015'
-	endDate = '20/03/2015'
+	startDate = '25/03/2015'
+	endDate = '25/03/2015'
 
 	# Get the list of IDs of divisions in the date range from ParlInfo
 	divisionIdList = divisionSearch(startDate, endDate)
@@ -435,12 +452,18 @@ def main():
 		groupDict['metadata'] = divisionsData['metadata']
 		divisionsGroupsList.append(groupDict)
 
+	# FIXME: This only sorts by item - should sort by date first.
+	divisionsGroupsList = sorted(divisionsGroupsList, key=lambda division: division['metadata']['item'])		
 
-	print divisionsGroupsList
+	for eachLine in divisionsGroupsList:
+		print eachLine, "\n"
+
+	global divisionsGroupsList 
+
+	print 'done.'
 
 	#result = resultsPrinter(startDate, endDate, 3)
 	#print result
 
 if __name__ == "__main__":
 	main()
-
