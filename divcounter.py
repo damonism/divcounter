@@ -1,51 +1,18 @@
 #-*- coding: utf-8 -*-
 
-from bs4 import BeautifulSoup
 import urllib2
 import urllib
 import re
+import json
 #import string
 from datetime import datetime
-
-#
-# Assign the senators to parties and groupings
-#
-
-# Members of each party
-membersALP = [u'McEwen', u'Brown', u'Bullock', u'Gallacher', u'Moore', u'Gallagher', u'Singh', u'Cameron',u'O\u2019Neill', u'Ketter', u'Urquhart', u'Carr', u'Lines', u'Polley', u'Ludwig', u'Wong', u'Collins', u'Marshall', 'Bilyk', 'Conroy', 'Dastyari', 'Lundy', 'McLucas', 'Peris', 'Sterle']
-membersLP = ['Birmingham', 'Abetz', u'Back', u'Edwards', u'Mason', u'Ronaldson', u'Bernardi', u'Fawcett', u'Ruston', u'Brandis', u'Fierravanti-Wells', u'Ryan', u'Fifield', u'Seselja', u'Bushby',  u'Johnston', u'Sinodinos', u'Canavan', u'Colbeck', u'Reynolds', 'Cash', 'Cormann', 'Heffernan', 'Parry', 'Payne', 'Smith']
-membersNP = [u'McKenzie', u'Nash', u'Williams', 'Macdonald', u'O\u2019Sullivan']
-membersCLP = [u'Scullion']
-membersLNP = [u'McGrath']
-membersGreens = ['Di Natalie', 'Rhiannon', 'Ludlam', 'Whish-Wilson', 'Waters', 'Siewert', 'Milne', 'Wright', 'Hanson-Young', 'Rice']
-membersLDP = ['Leyonhjelm']
-membersPUP = ['Wang']
-membersNXT = ['Xenophon']
-membersAMEP = ['Muir']
-membersFFP = ['Day']
-membersLaz = ['Lazarus']
-membersLam = ['Lambie']
-membersMad = ['Madigan']
-
-# groupsList is what all of the operations iterate over. New groups must be added here.
-# Group names as per Senate StatsNet
-groupsList = {
-              'Govt': set(membersLP + membersCLP + membersLNP + membersNP),
-              'Opp': set(membersALP),
-              'AG': set(membersGreens),
-              'FFP': set(membersFFP),
-              'PUP': set(membersPUP),
-              'LD': set(membersLDP),
-              'AMEP': set(membersAMEP),
-              'IndX': set(membersNXT),
-              'IndM': set(membersMad),
-              'IndL': set(membersLam)
-              }
+from bs4 import BeautifulSoup
 
 verbose = True
+baseUrl = 'http://parlinfo.aph.gov.au/parlInfo/search/display/display.w3p;query=Id%3A'
 
 def verbosePrinter(text):
-	# Makes it easier to turn the dubugging text on and off. 
+	"""Set verbose = True or False to turn the dubugging text on or off."""
 	
 	if verbose:
 		print '#DEBUG#:', text
@@ -53,11 +20,87 @@ def verbosePrinter(text):
 	else:
 		return
 
+def senators_in_groups_by_date(date_of_division):
+	
+	parliament44_start = datetime(2013, 11, 12)
+	parliament44_end = datetime(2016, 12, 30)
+	
+	# 44th Parliament
+	if date_of_division > parliament44_start and date_of_division < parliament44_end:
+		
+		# Default list of senators in the 44th Parliament
+		dict_senators_in_groups = {
+				'Govt': set(
+				            ['Birmingham', 'Abetz', u'Back', u'Edwards', u'Mason', 'Ronaldson', u'Bernardi', u'Fawcett', u'Ruston', u'Brandis', u'Fierravanti-Wells', u'Ryan', u'Fifield', u'Seselja', u'Bushby',  u'Johnston', u'Sinodinos', u'Canavan', u'Colbeck', u'Reynolds', 'Cash', 'Cormann', 'Heffernan', 'Parry', 'Payne', 'Smith', u'McKenzie', u'Nash', u'Williams', 'Macdonald', u'Scullion', u'McGrath', u'O\u2019Sullivan']
+				            ),
+				'Opp': set(
+				           [u'McEwen', u'Brown', u'Bullock', u'Gallacher', u'Moore', u'Gallagher', u'Singh', u'Cameron', u'Ketter', u'Urquhart', u'Carr', u'Lines', u'Polley', u'Ludwig', u'Wong', u'Collins', u'Marshall', 'Bilyk', 'Conroy', 'Dastyari', 'Lundy', 'McLucas', 'Peris', 'Sterle', u'O\u2019Neill']
+				           ),
+				'AG': set(
+				          ['Di Natalie', 'Rhiannon', 'Ludlam', 'Whish-Wilson', 'Waters', 'Siewert', 'Milne', 'Wright', 'Hanson-Young', 'Rice']
+				          ),
+				'FFP': set(
+				           ['Day']
+				           ),
+				'PUP': set(
+				           ['Wang', 'Lambie', 'Lazarus']
+				           ),
+				'LD': set(
+				          ['Leyonhjelm']
+				          ),
+				'AMEP': set(
+				            ['Muir']
+				            ),
+				'IndX': set(
+				            ['Xenophon']
+				            ),
+				'DLP': set(
+				            ['Magigan']
+				            )
+				}
+		
+		# Additions and removals of senators and groups in the 44th Parliament
+		# Info from: http://www.aph.gov.au/Senators_and_Members/Senators/Senate_Composition
+		# No need to change anything for Senator Madigan (left LDP on 4/9/2014)
+		# Senator Lambie leaves PUP on 24/11/2014
+		if date_of_division > datetime(2014, 11, 24):
+			dict_senators_in_groups['IndL'] = set('Lambie')
+			dict_senators_in_groups['PUP'].remove('Lambie')
+		# Senator Lazarus leaves PUP on 16/03/2015
+		if date_of_division > datetime(2015, 3, 16):
+			dict_senators_in_groups['IndLaz'] = set('Lazarus')
+			dict_senators_in_groups['PUP'].remove('Lazarus')
+		# FIXME: Still need to add the others
+
+	return dict_senators_in_groups
+
+def count_by_group(list_of_ayes, list_of_noes, date_of_division):
+	"""Takes a list of AYES senators and NOES senators and returns a dict of party votes"""
+
+	groupsList = senators_in_groups_by_date(date_of_division)
+	division_votes_by_group = {}
+		
+	for name, group in groupsList.iteritems():
+		if (group.isdisjoint(list_of_noes) and group.isdisjoint(list_of_ayes)):
+			division_votes_by_group[name] = '-'
+		elif group.isdisjoint(list_of_noes):
+			division_votes_by_group[name] = 'Yes'
+		elif group.isdisjoint(list_of_ayes):
+			division_votes_by_group[name] = 'No'
+		else:
+			division_votes_by_group[name] = 'Split'
+
+	return division_votes_by_group
+
 
 def getParlInfoId(id):
 	# Build the URL based on the System ID.
-	baseUrl = 'http://parlinfo.aph.gov.au/parlInfo/search/display/display.w3p;query=Id%3A'
-	url = urllib2.urlopen(baseUrl + urllib.quote('\"' + id + '\"'))
+
+	try:
+		url = urllib2.urlopen(baseUrl + urllib.quote('\"' + id + '\"'))
+	except URLError as e:
+		print e.reason
+				
 	content = url.read()
 	soup = BeautifulSoup(content)
 	return soup
@@ -119,6 +162,7 @@ def divisionsFromId(id):
 	divisionJoural = int(soup.select(".mdItem")[6].contents[0]) # Journal Number
 	divisionPage = isNumber(soup.select(".mdItem")[7].contents[0]) # Page
 	divisionParlInfoId = soup.select(".mdItem")[9].strong.contents[0] # ParlInfo ID
+	divisionUrl = baseUrl + urllib.quote('\"' + id + '\"') # URL of Journal segment
 
 	# Find everything with a HTML clas of 'Division[Head|List]' and stick it in divisionData
 	divisionData = soup.find_all(class_ = ["DivisionHead", "DivisionList"])
@@ -147,6 +191,7 @@ def divisionsFromId(id):
 			'page': divisionPage,
 			'parl': divisionParl,
 			'id': divisionParlInfoId,
+			'url': divisionUrl,
 			'ayes': divisionAyesNumber}
 			divisionsTable[divisionsNumberToday] = {}
 			divisionsTable[divisionsNumberToday]['metadata'] = divisionsMetaData
@@ -168,7 +213,7 @@ def divisionsFromId(id):
 	
 	verbosePrinter('Divisions in segment: ' + str(divisionsNumberToday))
 
-	# What sort of division was it?
+	# What sort of division was it? This still needs a bit of work.
 	# Here are the various strings I've seen:
 	# 'That this bill be now read a second time.'
 	# 'Question—That the amendment be agreed to—put.'
@@ -177,7 +222,7 @@ def divisionsFromId(id):
 	# 'That this bill be now read a third time.'
 	# 'Question—That Senator Fifield’s amendment to Senator Siewert’s proposed amendment be agreed to—put.'
 	# 'Question—That the amendment in respect of nos 1 and 2 be agreed to—put.'
-	# 'Question—That Schedule 1, Part 1 stand as printed—put.
+	# 'Question—That Schedule 1, Part 1 stand as printed—put. <-- This may be technically an amendment.
 	# 
 	# This one is too greedy: 	'Question2': u'Question(?:\u2014(.*)\u2014)\s*put\.'
 
@@ -238,27 +283,6 @@ def membersIntoGroups(divisionAyes, divisionNoes):
 
 	return groupVotes
 
-
-#   for divNumber in divisionsTable.iterkeys():
-#       #print '\n', divisionsTable[divNumber]['metadata']['bill'], '- Division', divNumber, "on", divisionsTable[divNumber]['metadata']['date'], '(Ayes: ', divisionsTable[divNumber]['metadata']['ayes'], ', Noes: ', divisionsTable[divNumber]['metadata']['noes'], '):'
-#       groupVotes = {}
-#       for name, group in groupsList.iteritems():
-#           # These are testing if a group isn't in a vote -- might not be very robust. Consider fixing.
-#           if (group.isdisjoint(divisionsTable[divNumber]['NOES']) and group.isdisjoint(divisionsTable[divNumber]['AYES'])):
-#               groupVotes[name] = '-'
-#               #print name, "-"
-#           elif group.isdisjoint(divisionsTable[divNumber]['NOES']):
-#               groupVotes[name] = 'Yes'
-#               #print name, "Yes"
-#           elif group.isdisjoint(divisionsTable[divNumber]['AYES']):
-#               groupVotes[name] = 'No'
-#               #print name, "No"
-#           else:
-#               groupVotes[name] = 'Split'
-#           groupsTable[divNumber]['Group'] = groupVotes
-#
-#   return divisionsTable
-
 def divisionSearch(dateStart, dateEnd):
 	#
 	# Dump out a list of all of the System IDs of the divisions (by a search for 'AYES' in content)
@@ -282,7 +306,7 @@ def divisionSearch(dateStart, dateEnd):
 	numResults = int(soup.select('.resultsSummary')[0].contents[1].split()[2])
 	numPages = int(numResults/resultsNumber) + 1
 
-	verbosePrinter('Found ' + str(numResults) + ' results on ' + str(numPages) + ' pages.')
+	verbosePrinter('Found ' + str(numResults) + ' journal segments on ' + str(numPages) + ' pages.')
 
 	# The System ID is identified with the 'sumMeta' class in the file
 	searchData = soup.find_all(class_ = 'sumMeta')
@@ -404,6 +428,23 @@ def resultsPrinter(startDate, endDate, printType):
 		# Do nothing.
 		return
 
+def json_serial(obj):
+	"""JSON serializer for objects not serializable by default json code"""
+	
+	if isinstance(obj, datetime):
+		serial = obj.isoformat()
+		return serial
+	raise TypeError ("Type not serializable")
+
+def date_hook(json_dict):
+	"""Turn JSON dates back into python datetime objects"""
+	for (key, value) in json_dict.items():
+		try:
+			json_dict[key] = datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")
+		except:
+			pass
+	return json_dict
+
 #
 # This works by finding ParlInfo System IDs. They look like:
 # 'chamber/journals/8cf7f440-8fe3-4b53-8d97-cd79dcc54fcb/0056'
@@ -431,7 +472,7 @@ def resultsPrinter(startDate, endDate, printType):
 def main():
 
 	startDate = '25/03/2015'
-	endDate = '25/03/2015'
+	endDate = '26/03/2015'
 
 	# Get the list of IDs of divisions in the date range from ParlInfo
 	divisionIdList = divisionSearch(startDate, endDate)
@@ -442,28 +483,42 @@ def main():
 		divisionsDataDict = divisionsFromId(divisionId)
 		for segmentNumber in divisionsDataDict.iterkeys():
 			divisionsDataList.append(divisionsDataDict[segmentNumber])
-
+	
+	print divisionsDataList
 
 	# Get the party/group votes
+	# Note, this has been put in as a separate step because ocasionally either the vote counter
+	# or the grouper will crash, brining the whole process to a halt. 
 	divisionsGroupsList = []
 	for divisionsData in divisionsDataList:
 		groupDict = {}
-		groupDict.update(membersIntoGroups(divisionsData['AYES'], divisionsData['NOES']))
+		groupDict.update(count_by_group(divisionsData['AYES'], 
+		                                divisionsData['NOES'], 
+		                                divisionsData['metadata']['date']))
 		groupDict['metadata'] = divisionsData['metadata']
+		groupDict['ayes'] = divisionsData['AYES']
+		groupDict['noes'] = divisionsData['NOES']
 		divisionsGroupsList.append(groupDict)
 
-	# FIXME: This only sorts by item - should sort by date first.
-	divisionsGroupsList = sorted(divisionsGroupsList, key=lambda division: division['metadata']['item'])		
+	# Sort by date, and then item (not sure if 'item' is that useful to sort on though)
+	divisionsGroupsList.sort(key=lambda x: (x['metadata']['date'], x['metadata']['item']))
+	
+	# Save the results into a JSON file
+	filename = "divisions-{}{}{}-{}{}{}.json".format(startDate.split('/')[2], startDate.split('/')[1], startDate.split('/')[0], endDate.split('/')[2], endDate.split('/')[1], endDate.split('/')[0])
+	with open(filename, 'w') as outfile:
+		json.dump(divisionsGroupsList, outfile, default=json_serial)
+		verbosePrinter("Saved JSON file.")
+	
+	# To import the JSON file into a python object:
+	# with open("divisions-20150325-20150326.json") as json_file:
+	#   json_data = json.load(json_file, object_hook=date_hook)
 
-	for eachLine in divisionsGroupsList:
-		print eachLine, "\n"
+	#for eachLine in divisionsGroupsList:
+	#	print eachLine, "\n"
 
-	global divisionsGroupsList 
+	#global divisionsGroupsList 
 
 	print 'done.'
-
-	#result = resultsPrinter(startDate, endDate, 3)
-	#print result
 
 if __name__ == "__main__":
 	main()
